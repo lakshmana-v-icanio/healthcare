@@ -1,9 +1,9 @@
 
-./thynkpro-ui/node_modules
-./thynkpro-ui/.next
-./thynkpro-ui/.env
+thynkpro-api/.env
+thynkpro-api/env
+thynkpro-api/migrations
 
-./thynkpro-api/.env
-./thynkpro-api/env
-./thynkpro-api/migrations
+thynkpro-ui/.env
+thynkpro-ui/node_modules
+thynkpro-ui/.next
 

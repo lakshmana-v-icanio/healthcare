@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 
 interface FileItem {
   id: string;
@@ -19,6 +20,7 @@ const UploadPage = () => {
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [currentUploadIndex, setCurrentUploadIndex] = useState<number>(-1);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -101,16 +103,28 @@ const UploadPage = () => {
       
       if (response.ok && result.success === "true") {
         // Update file item with success status and store patient data
+        const patientData = result.Data;
+        
         setFileItems(prev => {
           const updated = [...prev];
           updated[index] = { 
             ...updated[index], 
             status: 'completed', 
             progress: 100,
-            patientData: result.Data
+            patientData
           };
           return updated;
         });
+        
+        // Navigate to the detail page with the document and data
+        const docId = patientData.id || Math.random().toString(36).substring(2, 9);
+        const previewUrl = fileItem.preview;
+        // Store preview in sessionStorage to retrieve it on the next page
+        sessionStorage.setItem(`preview_${docId}`, previewUrl);
+        sessionStorage.setItem(`patientData_${docId}`, JSON.stringify(patientData));
+        
+        // Navigate to detail page
+        router.push(`/prescription/detail/${docId}`);
       } else {
         // Handle API error
         setFileItems(prev => {

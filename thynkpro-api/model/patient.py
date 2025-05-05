@@ -24,6 +24,48 @@ class Medicine(db.Model):
             'frequency': self.frequency
         }
 
+class Summary(db.Model):
+    __tablename__ = 'summaries'
+    
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    summary = db.Column(db.Text, nullable=True)
+    patient_id = db.Column(UUID(as_uuid=True), db.ForeignKey('patients.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"<Summary {self.id}>"
+    
+    def to_dict(self):
+        return {
+            'id': str(self.id),
+            'summary': self.summary,
+            'patient_id': str(self.patient_id),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+class Note(db.Model):
+    __tablename__ = 'notes'
+    
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    content = db.Column(db.Text, nullable=True)
+    patient_id = db.Column(UUID(as_uuid=True), db.ForeignKey('patients.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"<Note {self.id}>"
+    
+    def to_dict(self):
+        return {
+            'id': str(self.id),
+            'content': self.content,
+            'patient_id': str(self.patient_id),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
 class Patient(db.Model):
     __tablename__ = 'patients'
     
@@ -39,6 +81,8 @@ class Patient(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     medicines = db.relationship('Medicine', backref='patient', lazy=True, cascade="all, delete-orphan")
+    summaries = db.relationship('Summary', backref='patient', lazy=True, cascade="all, delete-orphan")
+    notes = db.relationship('Note', backref='patient', lazy=True, cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Patient {self.patient_name}>"
@@ -60,6 +104,8 @@ class Patient(db.Model):
                     'frequency': med.frequency
                 } for med in self.medicines
             ],
+            'summaries': [summary.to_dict() for summary in self.summaries],
+            'notes': [note.to_dict() for note in self.notes],
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -87,5 +133,23 @@ class Patient(db.Model):
                         frequency=med_data.get('frequency', '')
                     )
                     patient.medicines.append(medicine)
+        
+        # Create Summary objects for each summary in the data
+        if 'summaries' in data and isinstance(data['summaries'], list):
+            for summary_data in data['summaries']:
+                if isinstance(summary_data, dict):
+                    summary = Summary(
+                        summary=summary_data.get('summary', '')
+                    )
+                    patient.summaries.append(summary)
+        
+        # Create Note objects for each note in the data
+        if 'notes' in data and isinstance(data['notes'], list):
+            for note_data in data['notes']:
+                if isinstance(note_data, dict):
+                    note = Note(
+                        content=note_data.get('content', '')
+                    )
+                    patient.notes.append(note)
         
         return patient 

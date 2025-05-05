@@ -10,6 +10,7 @@ interface FileItem {
   preview: string;
   progress: number;
   status: 'pending' | 'uploading' | 'completed' | 'error';
+  patientData?: any; // Add this to store the returned patient data
 }
 
 const UploadPage = () => {
@@ -76,7 +77,7 @@ const UploadPage = () => {
     };
   }, []); // Empty dependency array since we only want this to run on unmount
 
-  const uploadFile = (fileItem: FileItem, index: number) => {
+  const uploadFile = async (fileItem: FileItem, index: number) => {
     // Update status to uploading
     setFileItems(prev => {
       const updated = [...prev];
@@ -84,39 +85,83 @@ const UploadPage = () => {
       return updated;
     });
     
-    // Simulate upload process for this file
-    const interval = setInterval(() => {
-      setFileItems(prev => {
-        const updated = [...prev];
-        const currentItem = updated[index];
-        
-        if (currentItem.progress >= 100) {
-          clearInterval(interval);
-          updated[index] = { ...currentItem, status: 'completed', progress: 100 };
-          
-          // Check if all files are completed
-          const allCompleted = updated.every(item => item.status === 'completed');
-          if (allCompleted) {
-            setIsUploading(false);
-            setTimeout(() => {
-              alert("All images uploaded successfully!");
-            }, 500);
-          }
-          
+    try {
+      // Create form data to send to the API
+      const formData = new FormData();
+      formData.append('image', fileItem.file);
+      
+      // Make API call to the backend
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/patient/extract_text`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      // Parse the response
+      const result = await response.json();
+      
+      if (response.ok && result.success === "true") {
+        // Update file item with success status and store patient data
+        setFileItems(prev => {
+          const updated = [...prev];
+          updated[index] = { 
+            ...updated[index], 
+            status: 'completed', 
+            progress: 100,
+            patientData: result.Data
+          };
           return updated;
+        });
+      } else {
+        // Handle API error
+        setFileItems(prev => {
+          const updated = [...prev];
+          updated[index] = { 
+            ...updated[index], 
+            status: 'error', 
+            progress: 0
+          };
+          return updated;
+        });
+      }
+      
+      // Check if all files are completed or errored
+      setFileItems(prev => {
+        const allFinished = prev.every(item => 
+          item.status === 'completed' || item.status === 'error'
+        );
+        
+        if (allFinished && isUploading) {
+          setIsUploading(false);
+          const successCount = prev.filter(item => item.status === 'completed').length;
+          setTimeout(() => {
+            if (successCount > 0) {
+              alert(`${successCount} prescription(s) processed successfully!`);
+            }
+          }, 500);
         }
         
-        updated[index] = { ...currentItem, progress: currentItem.progress + 10 };
+        return prev;
+      });
+      
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      setFileItems(prev => {
+        const updated = [...prev];
+        updated[index] = { 
+          ...updated[index], 
+          status: 'error', 
+          progress: 0 
+        };
         return updated;
       });
-    }, 300);
+    }
   };
 
   const handleUploadSubmit = () => {
     if (fileItems.length === 0 || isUploading) return;
     
     setIsUploading(true);
-    // Start uploading all pending files simultaneously
+    // Upload files one by one
     fileItems.forEach((fileItem, index) => {
       if (fileItem.status === 'pending') {
         uploadFile(fileItem, index);
@@ -250,10 +295,15 @@ const UploadPage = () => {
                     <p className="font-medium text-gray-800 dark:text-gray-200 truncate">{item.name}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       {item.status === 'pending' && 'Ready to upload'}
-                      {item.status === 'uploading' && 'Uploading...'}
-                      {item.status === 'completed' && 'Upload complete'}
-                      {item.status === 'error' && 'Upload failed'}
+                      {item.status === 'uploading' && 'Processing prescription...'}
+                      {item.status === 'completed' && item.patientData && `Extracted data for ${item.patientData.patient_name || 'Patient'}`}
+                      {item.status === 'error' && 'Processing failed'}
                     </p>
+                    {item.status === 'completed' && item.patientData && (
+                      <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                        ID: {item.patientData.id} • {item.patientData.diagnosis || 'No diagnosis'}
+                      </p>
+                    )}
                   </div>
                   <button
                     onClick={() => handleRemoveFile(item.id)}
@@ -269,7 +319,7 @@ const UploadPage = () => {
                 {(item.status === 'uploading' || item.status === 'completed') && (
                   <div className="w-full mt-2">
                     <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
-                      <span>{item.status === 'uploading' ? 'Uploading...' : 'Completed'}</span>
+                      <span>{item.status === 'uploading' ? 'Processing...' : 'Processed'}</span>
                       <span>{item.progress}%</span>
                     </div>
                     <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">

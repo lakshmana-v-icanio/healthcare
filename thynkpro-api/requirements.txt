@@ -5,3 +5,4 @@ python-dotenv
 Flask-SQLAlchemy
 psycopg2
 Flask-Migrate
+Flask-CORS

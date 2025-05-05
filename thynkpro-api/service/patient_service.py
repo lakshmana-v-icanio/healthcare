@@ -62,9 +62,13 @@ def get_all_patients():
     try:
         patients = Patient.query.all()
         patients_data = []
+
+        if patients is None:
+            return _format_response({}, success=False, status_code=404)
         
         for patient in patients:
             patients_data.append({
+                'id': patient.id,
                 'patient_name': patient.patient_name,
                 'diagnosis': patient.diagnosis,
                 'patient_age': patient.patient_age,
@@ -132,3 +136,13 @@ def update_patient(patient_id, data):
     except Exception as e:
         db.session.rollback()
         return _format_response(f"Error updating patient: {e}", success=False, status_code=500)
+
+def get_patient_by_id(patient_id):
+    try:
+        patient = Patient.query.get(patient_id)
+        if not patient:
+            return _format_response("Patient not found", success=False, status_code=404)
+        
+        return _format_response("Patient retrieved successfully", patient.to_dict())
+    except Exception as e:
+        return _format_response(f"Error retrieving patient: {e}", success=False, status_code=500)

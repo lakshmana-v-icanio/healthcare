@@ -3,8 +3,10 @@ from config.ai_config import model
 from controller.patient_controller import patient_bp
 from config.db_config import init_db
 from model import init_models
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
 init_db(app)
 

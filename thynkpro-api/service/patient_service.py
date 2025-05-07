@@ -1,7 +1,8 @@
 import json
 import re
+import os
 from config.ai_config import model
-from model.patient import Patient
+from model.patient import Patient, PatientFile
 from config.db_config import db
 
 def _format_response(message, data=None, success=True, status_code=200):
@@ -34,10 +35,32 @@ def extract_text_from_image(image_file, patient_json_schema):
         
         # Save the patient to the database
         try:
+            # Add patient to database first to get an ID
             db.session.add(patient)
+            db.session.flush()
+            
+            # Create a PatientFile record for the uploaded image
+            # Get file size
+            image_file.seek(0, os.SEEK_END)
+            file_size = image_file.tell()
+            image_file.seek(0)  # Reset file pointer
+            
+            # For simplicity, we'll use the filename as the URL
+            # In a production environment, you would save the file to storage and get a proper URL
+            file_url = f"/uploads/{image_file.filename}"
+            
+            patient_file = PatientFile(
+                file_name=image_file.filename,
+                file_url=file_url,
+                file_size=file_size,
+                patient_id=patient.id
+            )
+            
+            db.session.add(patient_file)
             db.session.commit()
+            
             # Update extracted_data with database ID
-            extracted_data['id'] = patient.id
+            extracted_data['id'] = str(patient.id)
             return _format_response("Patient Data Extracted and Saved Successfully", extracted_data)
         except Exception as db_error:
             db.session.rollback()
@@ -146,3 +169,52 @@ def get_patient_by_id(patient_id):
         return _format_response("Patient retrieved successfully", patient.to_dict())
     except Exception as e:
         return _format_response(f"Error retrieving patient: {e}", success=False, status_code=500)
+
+def upload_file_for_patient(patient_id, file):
+    try:
+        patient = Patient.query.get(patient_id)
+        if not patient:
+            return _format_response("Patient not found", success=False, status_code=404)
+        
+        # Get file size
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
+        file.seek(0)  # Reset file pointer
+        
+        # For simplicity, using filename as URL
+        # In production, you would save the file to storage and get a proper URL
+        file_url = f"/uploads/{file.filename}"
+        
+        # Create and add the new file record
+        patient_file = PatientFile(
+            file_name=file.filename,
+            file_url=file_url,
+            file_size=file_size,
+            patient_id=patient_id
+        )
+        
+        db.session.add(patient_file)
+        db.session.commit()
+        
+        return _format_response("File uploaded successfully", patient_file.to_dict())
+    except Exception as e:
+        db.session.rollback()
+        return _format_response(f"Error uploading file: {e}", success=False, status_code=500)
+
+def get_patients_by_ids(patient_ids):
+    try:
+        patients_data = []
+        
+        for patient_id in patient_ids:
+            patient = Patient.query.get(patient_id)
+            if patient:
+                # Get complete patient data including files and other details
+                patient_dict = patient.to_dict()
+                patients_data.append(patient_dict)
+        
+        if not patients_data:
+            return _format_response("No patients found with the provided IDs", success=False, status_code=404)
+        
+        return _format_response("Patients data retrieved successfully", patients_data)
+    except Exception as e:
+        return _format_response(f"Error retrieving patients data: {e}", success=False, status_code=500)

@@ -19,6 +19,7 @@ const UploadPage = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [currentUploadIndex, setCurrentUploadIndex] = useState<number>(-1);
+  const [successfulPatientIds, setSuccessfulPatientIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -105,6 +106,11 @@ const UploadPage = () => {
         // Update file item with success status and store patient data
         const patientData = result.Data;
         
+        // Add patient ID to successful list
+        const patientId = patientData.id || Math.random().toString(36).substring(2, 9);
+        console.log("Adding patient ID to successful list:", patientId);
+        setSuccessfulPatientIds(prev => [...prev, patientId]);
+        
         setFileItems(prev => {
           const updated = [...prev];
           updated[index] = { 
@@ -116,15 +122,13 @@ const UploadPage = () => {
           return updated;
         });
         
-        // Navigate to the detail page with the document and data
-        const docId = patientData.id || Math.random().toString(36).substring(2, 9);
-        const previewUrl = fileItem.preview;
         // Store preview in sessionStorage to retrieve it on the next page
-        sessionStorage.setItem(`preview_${docId}`, previewUrl);
-        sessionStorage.setItem(`patientData_${docId}`, JSON.stringify(patientData));
+        const previewUrl = fileItem.preview;
+        sessionStorage.setItem(`preview_${patientId}`, previewUrl);
+        sessionStorage.setItem(`patientData_${patientId}`, JSON.stringify(patientData));
         
-        // Navigate to detail page
-        router.push(`/prescription/detail/${docId}`);
+        // Remove navigation to individual detail page
+        // router.push(`/prescription/detail/${patientId}`);
       } else {
         // Handle API error
         setFileItems(prev => {
@@ -139,23 +143,45 @@ const UploadPage = () => {
       }
       
       // Check if all files are completed or errored
-      setFileItems(prev => {
-        const allFinished = prev.every(item => 
-          item.status === 'completed' || item.status === 'error'
-        );
-        
-        if (allFinished && isUploading) {
-          setIsUploading(false);
-          const successCount = prev.filter(item => item.status === 'completed').length;
-          setTimeout(() => {
-            if (successCount > 0) {
-              alert(`${successCount} prescription(s) processed successfully!`);
-            }
-          }, 500);
-        }
-        
-        return prev;
+      const updatedFileItems = await new Promise<FileItem[]>(resolve => {
+        setFileItems(prev => {
+          resolve(prev);
+          return prev;
+        });
       });
+      
+      const allFinished = updatedFileItems.every(item => 
+        item.status === 'completed' || item.status === 'error'
+      );
+      
+      console.log("All finished:", allFinished, "isUploading:", isUploading);
+      console.log("File statuses:", updatedFileItems.map(item => item.status));
+      
+      if (allFinished && isUploading) {
+        setIsUploading(false);
+        const successCount = updatedFileItems.filter(item => item.status === 'completed').length;
+        console.log("Success count:", successCount);
+        
+        // Get the latest patient IDs
+        const currentPatientIds = await new Promise<string[]>(resolve => {
+          setSuccessfulPatientIds(prev => {
+            resolve(prev);
+            return prev;
+          });
+        });
+        
+        console.log("Current patient IDs:", currentPatientIds);
+        
+        if (successCount > 0 && currentPatientIds.length > 0) {
+          // Store all patient IDs in session storage
+          sessionStorage.setItem('allPatientIds', JSON.stringify(currentPatientIds));
+          console.log("Navigating to document-detail page");
+          // Ensure navigation happens outside of state update
+          setTimeout(() => {
+            router.push('/document-detail');
+          }, 100);
+        }
+      }
       
     } catch (error) {
       console.error("Error uploading file:", error);
@@ -174,7 +200,10 @@ const UploadPage = () => {
   const handleUploadSubmit = () => {
     if (fileItems.length === 0 || isUploading) return;
     
+    // Clear previous successful IDs
+    setSuccessfulPatientIds([]);
     setIsUploading(true);
+    
     // Upload files one by one
     fileItems.forEach((fileItem, index) => {
       if (fileItem.status === 'pending') {
@@ -347,6 +376,21 @@ const UploadPage = () => {
               </div>
             ))}
           </div>
+          
+          {/* Add view details button */}
+          {successfulPatientIds.length > 0 && (
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => {
+                  sessionStorage.setItem('allPatientIds', JSON.stringify(successfulPatientIds));
+                  router.push('/document-detail');
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-green-500 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                View Patient Details
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

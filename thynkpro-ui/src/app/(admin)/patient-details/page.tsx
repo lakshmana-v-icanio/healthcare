@@ -46,11 +46,12 @@ const PatientDetailsPage = () => {
 
   const filteredPatients = patients.filter(patient => {
     const matchesSearch = 
-      patient.patient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.diagnosis.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.patient_gender.toLowerCase().includes(searchTerm.toLowerCase());
+      (patient.patient_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+      (patient.diagnosis?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+      (patient.patient_gender?.toLowerCase() || '').includes(searchTerm.toLowerCase());
     
-    const matchesGender = filterGender === 'all' || patient.patient_gender.toLowerCase() === filterGender.toLowerCase();
+    const matchesGender = filterGender === 'all' || 
+      (patient.patient_gender?.toLowerCase() || '') === filterGender.toLowerCase();
     
     return matchesSearch && matchesGender;
   });

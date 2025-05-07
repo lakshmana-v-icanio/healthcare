@@ -3,6 +3,9 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getPatientById, updatePatient } from '@/services/api/patient';
+import { getPatientSummaries, generateSummary, deleteSummary } from '@/services/api/summary';
+import { Summary } from '@/services/api/summary';
+import ReactMarkdown from 'react-markdown';
 
 interface Medicine {
   medicine_name: string;
@@ -40,6 +43,13 @@ const PatientDetailPage = ({ params }: PatientDetailPageProps) => {
   const [editedPatient, setEditedPatient] = useState<Patient | null>(null);
   const [updateLoading, setUpdateLoading] = useState<boolean>(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  
+  // Summary state
+  const [summaries, setSummaries] = useState<Summary[]>([]);
+  const [summaryLoading, setSummaryLoading] = useState<boolean>(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [generatingNew, setGeneratingNew] = useState<boolean>(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchPatientData = async () => {
@@ -48,6 +58,9 @@ const PatientDetailPage = ({ params }: PatientDetailPageProps) => {
         const patientData = await getPatientById(id);
         setPatient(patientData as Patient);
         setEditedPatient(patientData as Patient);
+        
+        // Load summaries after loading patient
+        loadSummaries();
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred');
         console.error('Error fetching patient details:', err);
@@ -58,6 +71,50 @@ const PatientDetailPage = ({ params }: PatientDetailPageProps) => {
 
     fetchPatientData();
   }, [id]);
+
+  // Function to load summaries
+  const loadSummaries = async () => {
+    try {
+      setSummaryLoading(true);
+      setSummaryError(null);
+      const data = await getPatientSummaries(id);
+      setSummaries(data);
+    } catch (err) {
+      setSummaryError(err instanceof Error ? err.message : 'Failed to load summaries');
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
+  // Function to generate a new summary
+  const handleGenerateSummary = async () => {
+    try {
+      setGeneratingNew(true);
+      setSummaryError(null);
+      await generateSummary(id);
+      // Reload summaries after generating
+      await loadSummaries();
+    } catch (err) {
+      setSummaryError(err instanceof Error ? err.message : 'Failed to generate summary');
+    } finally {
+      setGeneratingNew(false);
+    }
+  };
+
+  // Function to delete a summary
+  const handleDeleteSummary = async (summaryId: string) => {
+    try {
+      setDeletingId(summaryId);
+      setSummaryError(null);
+      await deleteSummary(summaryId);
+      // Reload summaries after deletion
+      await loadSummaries();
+    } catch (err) {
+      setSummaryError(err instanceof Error ? err.message : 'Failed to delete summary');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const handleGoBack = () => {
     router.back();
@@ -271,9 +328,9 @@ const PatientDetailPage = ({ params }: PatientDetailPageProps) => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="flex flex-col gap-8">
         {/* Patient Basic Information */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:col-span-2 border border-gray-100 dark:border-gray-700 hover:shadow-xl transition-shadow duration-300">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-100 dark:border-gray-700 hover:shadow-xl transition-shadow duration-300">
           {isEditing ? (
             <>
               <div className="mb-4">
@@ -569,6 +626,88 @@ const PatientDetailPage = ({ params }: PatientDetailPageProps) => {
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">This patient has no prescribed medicines.</p>
               </div>
             )
+          )}
+        </div>
+
+        {/* Patient Summaries Section */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-100 dark:border-gray-700 hover:shadow-xl transition-shadow duration-300">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+              Patient Summaries
+            </h2>
+            
+            <button
+              onClick={handleGenerateSummary}
+              disabled={generatingNew}
+              className={`px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors duration-200 flex items-center ${generatingNew ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {generatingNew ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                  Generate Summary
+                </>
+              )}
+            </button>
+          </div>
+          
+          {summaryError && (
+            <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">
+              <p>{summaryError}</p>
+            </div>
+          )}
+          
+          {summaryLoading ? (
+            <div className="p-8 flex justify-center">
+              <svg className="animate-spin h-8 w-8 text-brand-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            </div>
+          ) : summaries.length > 0 ? (
+            <div className="space-y-4">
+              {summaries.map((summary) => (
+                <div key={summary.id} className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm text-gray-500">{new Date(summary.created_at).toLocaleString()}</span>
+                    <button 
+                      onClick={() => handleDeleteSummary(summary.id)}
+                      disabled={deletingId === summary.id}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      {deletingId === summary.id ? (
+                        <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                  <div className="mt-2 p-3 bg-white dark:bg-gray-800 rounded prose prose-sm max-w-none dark:prose-invert">
+                    <ReactMarkdown>
+                      {summary.summary}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-gray-500">
+              <p>No summaries available. Generate a summary to get started.</p>
+            </div>
           )}
         </div>
       </div>

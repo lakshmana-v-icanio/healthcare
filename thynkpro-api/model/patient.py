@@ -66,6 +66,31 @@ class Note(db.Model):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
+class PatientFile(db.Model):
+    __tablename__ = 'patient_files'
+    
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    file_name = db.Column(db.String(255), nullable=False)
+    file_url = db.Column(db.String(512), nullable=False)
+    file_size = db.Column(db.Integer, nullable=False)
+    patient_id = db.Column(UUID(as_uuid=True), db.ForeignKey('patients.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"<PatientFile {self.file_name}>"
+    
+    def to_dict(self):
+        return {
+            'id': str(self.id),
+            'file_name': self.file_name,
+            'file_url': self.file_url,
+            'file_size': self.file_size,
+            'patient_id': str(self.patient_id),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
 class Patient(db.Model):
     __tablename__ = 'patients'
     
@@ -83,6 +108,7 @@ class Patient(db.Model):
     medicines = db.relationship('Medicine', backref='patient', lazy=True, cascade="all, delete-orphan")
     summaries = db.relationship('Summary', backref='patient', lazy=True, cascade="all, delete-orphan")
     notes = db.relationship('Note', backref='patient', lazy=True, cascade="all, delete-orphan")
+    files = db.relationship('PatientFile', backref='patient', lazy=True, cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Patient {self.patient_name}>"
@@ -106,6 +132,7 @@ class Patient(db.Model):
             ],
             'summaries': [summary.to_dict() for summary in self.summaries],
             'notes': [note.to_dict() for note in self.notes],
+            'files': [file.to_dict() for file in self.files],
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -151,5 +178,16 @@ class Patient(db.Model):
                         content=note_data.get('content', '')
                     )
                     patient.notes.append(note)
+        
+        # Create PatientFile objects for each file in the data
+        if 'files' in data and isinstance(data['files'], list):
+            for file_data in data['files']:
+                if isinstance(file_data, dict):
+                    file = PatientFile(
+                        file_name=file_data.get('file_name', ''),
+                        file_url=file_data.get('file_url', ''),
+                        file_size=file_data.get('file_size', 0)
+                    )
+                    patient.files.append(file)
         
         return patient 
